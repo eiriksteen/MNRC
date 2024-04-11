@@ -78,9 +78,12 @@ class MINDDataset(Dataset):
             user = row["User ID"]
             for impression in row["Impressions"].split():
                 article, label = impression.split("-")
-                behaviors_dict[f"{user}-{article}-{row['Time']}"] = float(label)
+                if article in self.article_to_id.keys():
+                    behaviors_dict[f"{user}-{article}-{row['Time']}"] = float(label)
+
             if not pd.isna(row["History"]):
                 for article in row["History"].split():
-                    behaviors_dict[f"{user}-{article}-{row['Time']}"] = 1.0
+                    if article in self.article_to_id.keys():
+                        behaviors_dict[f"{user}-{article}-{row['Time']}"] = 1.0
 
         return list(behaviors_dict.items())

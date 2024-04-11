@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
+import argparse
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
 from pathlib import Path
 from mnrc.torch_datasets import MINDDataset
-from mnrc.models import MatrixFactorizer
+from mnrc.models import MatrixFactorizer, NeuralMatrixFactorizer
 from pprint import pprint
 
 DEVICE = (
@@ -23,7 +24,8 @@ def train(
         validation_data,
         lr,
         batch_size,
-        num_epochs
+        num_epochs,
+        out_dir
     ):
 
     model = model.to(DEVICE)
@@ -31,8 +33,9 @@ def train(
     val_loader = DataLoader(validation_data, batch_size)
     loss_func = nn.BCELoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    min_val_loss = float("inf")
 
-    for epoch in range(num_epochs):
+    for epoch in range(num_epochs): 
         print(f"RUNNING EPOCH {epoch+1}")
         
         model.train()
@@ -69,13 +72,25 @@ def train(
             "valid_loss": valid_loss / len(val_loader)
         }
 
+        if metrics["valid_loss"] < min_val_loss:
+            min_val_loss = metrics["valid_loss"]
+            torch.save(model.state_dict(), out_dir / "model")
+
         pprint(metrics)
 
 
 if __name__ == "__main__":
 
-    latent_dim = 64
-    out_dir = Path("training_results")
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--model", default="matrix_factorizer", type=str)
+    parser.add_argument("--latent_dim", default=64, type=int)
+    parser.add_argument("--resume_training", default=True, type=bool)
+    parser.add_argument("--lr", default=1e-03, type=float)
+    parser.add_argument("--batch_size", default=64, type=int)
+    parser.add_argument("--num_epochs", default=10, type=int)
+
+    args = parser.parse_args()
 
     dataset = MINDDataset(
         "train", 
@@ -86,14 +101,22 @@ if __name__ == "__main__":
     num_users = dataset.get_num_users()
     num_items = dataset.get_num_items()
 
-    model = MatrixFactorizer(num_users, num_items, latent_dim)
+    if args.model == "matrix_factorizer":
+        model = MatrixFactorizer(num_users, num_items, args.latent_dim)
+    elif args.model == "mlp":
+        model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim)
+    else:
+        raise ValueError(f"{args.model} not implemented")
 
-    try:
-        model.load_state_dict(torch.load(out_dir / "model"))
-        print(f"Model found at {out_dir / 'model'}, resuming training")
+    out_dir = Path(f"training_results_{args.model}")
+    out_dir.mkdir(exist_ok=True)
 
-    except FileNotFoundError:
-        print(f"No model found at {out_dir / 'model'}, training from scratch")
+    if args.resume_training:
+        try:
+            model.load_state_dict(torch.load(out_dir / "model"))
+            print(f"Model found at {out_dir / 'model'}, resuming training")
+        except FileNotFoundError:
+            print(f"No model found at {out_dir / 'model'}, training from scratch")
 
     train_data, validation_data = random_split(dataset, [0.8, 0.2])
 
@@ -101,7 +124,8 @@ if __name__ == "__main__":
         model,
         train_data,
         validation_data,
-        lr=1e-03,
-        batch_size=64,
-        num_epochs=25
+        lr=args.lr,
+        batch_size=args.batch_size,
+        num_epochs=args.num_epochs,
+        out_dir=out_dir
     )
