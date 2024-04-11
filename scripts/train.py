@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import argparse
+import json
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support
@@ -33,7 +34,7 @@ def train(
     train_loader = DataLoader(train_data, batch_size, shuffle=True)
     val_loader = DataLoader(validation_data, batch_size)
     loss_func = nn.BCELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
     min_val_loss = float("inf")
 
     for epoch in range(num_epochs): 
@@ -78,16 +79,19 @@ def train(
             "train_loss": train_loss / len(train_loader),
             "valid_loss": valid_loss / len(val_loader),
             "accuracy": a,
-            "precision": p,
-            "recall": r,
-            "f1": f,
-            "support": s
+            "precision": p.tolist(),
+            "recall": r.tolist(),
+            "f1": f.tolist(),
+            "support": s.tolist()
         }
 
         if metrics["valid_loss"] < min_val_loss:
             print("New min loss, saving model")
             min_val_loss = metrics["valid_loss"]
             torch.save(model.state_dict(), out_dir / "model")
+
+            with open(out_dir / f"metrics_epoch{epoch+1}.json", "w") as f:
+                json.dump(metrics, f)
 
         pprint(metrics)
 
@@ -121,7 +125,7 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"{args.model} not implemented")
 
-    out_dir = Path(f"training_results_{args.model}")
+    out_dir = Path(f"training_results_{args.model}_test")
     out_dir.mkdir(exist_ok=True)
 
     if args.resume_training:

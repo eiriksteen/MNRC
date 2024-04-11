@@ -28,7 +28,7 @@ class NeuralMatrixFactorizer(nn.Module):
 
         user_vecs_mlp = self.user_matrix_mlp.weight[user_ids].squeeze(dim=1)
         item_vecs_mlp = self.item_matrix_mlp.weight[item_ids].squeeze(dim=1)
-        logits_mlp = self.mlp(torch.cat((user_vecs_mlp, item_vecs_mlp), dim=-1)).squeeze(dim=1)
+        logits_mlp = self.mlp(torch.cat((user_vecs_mlp, item_vecs_mlp), dim=-1))
 
         logits = self.sigmoid(self.linear(torch.cat((logits_gmf, logits_mlp), dim=-1)))
 
