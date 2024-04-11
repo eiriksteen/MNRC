@@ -85,6 +85,7 @@ def train(
         }
 
         if metrics["valid_loss"] < min_val_loss:
+            print("New min loss, saving model")
             min_val_loss = metrics["valid_loss"]
             torch.save(model.state_dict(), out_dir / "model")
 
@@ -115,7 +116,7 @@ if __name__ == "__main__":
 
     if args.model == "matrix_factorizer":
         model = MatrixFactorizer(num_users, num_items, args.latent_dim)
-    elif args.model == "mlp":
+    elif args.model == "ncf":
         model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim)
     else:
         raise ValueError(f"{args.model} not implemented")
