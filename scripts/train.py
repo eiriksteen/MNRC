@@ -3,6 +3,7 @@ import torch.nn as nn
 import argparse
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from pathlib import Path
 from mnrc.torch_datasets import MINDDataset
 from mnrc.models import MatrixFactorizer, NeuralMatrixFactorizer
@@ -56,6 +57,7 @@ def train(
 
         model.eval()
         valid_loss = 0
+        total_preds, total_scores = [], []
         with torch.no_grad():
             for batch in tqdm(val_loader):
 
@@ -67,9 +69,19 @@ def train(
                 loss = loss_func(logits, scores)
                 valid_loss += loss.item()
 
+                total_preds += torch.where(logits > 0.5, 1, 0).squeeze().detach().cpu().tolist()
+                total_scores += scores.squeeze().detach().cpu().tolist()
+
+        a, (p, r, f, s) = accuracy_score(total_scores, total_preds), precision_recall_fscore_support(total_scores, total_preds)
+        
         metrics = {
             "train_loss": train_loss / len(train_loader),
-            "valid_loss": valid_loss / len(val_loader)
+            "valid_loss": valid_loss / len(val_loader),
+            "accuracy": a,
+            "precision": p,
+            "recall": r,
+            "f1": f,
+            "support": s
         }
 
         if metrics["valid_loss"] < min_val_loss:
