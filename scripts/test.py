@@ -8,7 +8,6 @@ if __name__ == "__main__":
     dataset = MINDDataset(
         "train", 
         to_torch=True, 
-        merge_past_cur=True,
         data_path=Path("data")
     )
 

@@ -9,7 +9,6 @@ class MINDDataset(Dataset):
             self,
             split: str,
             to_torch: bool = True,
-            merge_past_cur: bool = True,
             data_path: Path = Path("data")
         ):
 
@@ -26,7 +25,6 @@ class MINDDataset(Dataset):
         self.news_df.columns = ["News ID", "Category", "SubCategory", "Title", "Abstract", "URL", "Title Entities", "Abstract Entities"]
 
         self.to_torch = to_torch
-        self.merge_past_cur = merge_past_cur
         self.user_to_id, self.id_to_user, self.article_to_id, self.id_to_article = self.get_id_dicts()
 
         self.behaviors = self.preprocess_behaviors()

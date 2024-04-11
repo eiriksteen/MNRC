@@ -75,11 +75,11 @@ def train(
 if __name__ == "__main__":
 
     latent_dim = 64
+    out_dir = Path("training_results")
 
     dataset = MINDDataset(
         "train", 
         to_torch=True, 
-        merge_past_cur=True,
         data_path=Path("data")
     )
 
@@ -87,6 +87,13 @@ if __name__ == "__main__":
     num_items = dataset.get_num_items()
 
     model = MatrixFactorizer(num_users, num_items, latent_dim)
+
+    try:
+        model.load_state_dict(torch.load(out_dir / "model"))
+        print(f"Model found at {out_dir / 'model'}, resuming training")
+
+    except FileNotFoundError:
+        print(f"No model found at {out_dir / 'model'}, training from scratch")
 
     train_data, validation_data = random_split(dataset, [0.8, 0.2])
 
