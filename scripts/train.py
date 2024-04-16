@@ -4,7 +4,7 @@ import argparse
 import json
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score
 from pathlib import Path
 from mnrc.torch_datasets import MINDDataset
 from mnrc.models import MatrixFactorizer, NeuralMatrixFactorizer
@@ -73,7 +73,9 @@ def train(
                 total_preds += torch.where(logits > 0.5, 1, 0).squeeze().detach().cpu().tolist()
                 total_scores += scores.squeeze().detach().cpu().tolist()
 
-        a, (p, r, f, s) = accuracy_score(total_scores, total_preds), precision_recall_fscore_support(total_scores, total_preds)
+        a = accuracy_score(total_scores, total_preds)
+        p, r, f, s = precision_recall_fscore_support(total_scores, total_preds)
+        auc = roc_auc_score(total_scores, total_preds)
         
         metrics = {
             "train_loss": train_loss / len(train_loader),
@@ -82,6 +84,7 @@ def train(
             "precision": p.tolist(),
             "recall": r.tolist(),
             "f1": f.tolist(),
+            "auc": auc,
             "support": s.tolist()
         }
 
@@ -117,15 +120,17 @@ if __name__ == "__main__":
 
     num_users = dataset.get_num_users()
     num_items = dataset.get_num_items()
+    texts = dataset.get_article_texts()
 
     if args.model == "matrix_factorizer":
         model = MatrixFactorizer(num_users, num_items, args.latent_dim)
     elif args.model == "ncf":
         model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim)
+        model.init_weights_from_text(texts)
     else:
         raise ValueError(f"{args.model} not implemented")
 
-    out_dir = Path(f"training_results_{args.model}_test")
+    out_dir = Path(f"training_results_{args.model}")
     out_dir.mkdir(exist_ok=True)
 
     if args.resume_training:

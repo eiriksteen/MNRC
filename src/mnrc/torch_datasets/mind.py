@@ -23,14 +23,16 @@ class MINDDataset(Dataset):
         
         self.behaviors_df.columns = ["Impression ID", "User ID", "Time", "History", "Impressions"]
         self.news_df.columns = ["News ID", "Category", "SubCategory", "Title", "Abstract", "URL", "Title Entities", "Abstract Entities"]
-
         self.to_torch = to_torch
         self.user_to_id, self.id_to_user, self.article_to_id, self.id_to_article = self.get_id_dicts()
-
         self.behaviors = self.preprocess_behaviors()
 
-    def __len__(self):
+        self.news_df["All Text"] = self.news_df["Title"]+ \
+                                ". "+self.news_df["Category"]+ \
+                                    ". "+self.news_df["SubCategory"]+ \
+                                        ". "+self.news_df["Abstract"]
 
+    def __len__(self):
         return len(self.behaviors)
     
     def __getitem__(self, index):
@@ -57,6 +59,11 @@ class MINDDataset(Dataset):
     
     def get_num_items(self):
         return len(self.article_to_id)
+    
+    def get_article_texts(self):
+        texts = [t if not pd.isna(t) else "" for t in self.news_df["All Text"].tolist()]
+        assert len(texts) == self.get_num_items()
+        return texts
 
     def get_id_dicts(self):
         

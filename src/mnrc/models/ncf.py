@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from sentence_transformers import SentenceTransformer
 
 class NeuralMatrixFactorizer(nn.Module):
 
@@ -11,6 +12,8 @@ class NeuralMatrixFactorizer(nn.Module):
         self.user_matrix_mlp = nn.Embedding(num_users, latent_dim)
         self.item_matrix_mlp = nn.Embedding(num_items, latent_dim)
 
+        self.embedding_proj = nn.Linear(384, latent_dim)
+
         self.mlp = nn.Sequential(
             nn.Linear(2*latent_dim, latent_dim),
             nn.ReLU(),
@@ -19,6 +22,15 @@ class NeuralMatrixFactorizer(nn.Module):
 
         self.linear = nn.Linear(2*latent_dim, 1)
         self.sigmoid = nn.Sigmoid()
+
+    def init_weights_from_text(self, article_texts):
+        print("INITIALIZING ITEM EMBEDDINGS USING TEXT EMBEDDINGS (MIGHT TAKE SOME TIME)")
+        model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+        embeddings = model.encode(article_texts, convert_to_tensor=True)
+        embeddings = self.embedding_proj(embeddings.to(self.embedding_proj.weight.data.device))
+        self.item_matrix_gmf.weight.data = embeddings
+        self.item_matrix_mlp.weight.data = embeddings
+        print("INITIALIZATION DONE")
 
     def forward(self, user_ids, item_ids):
 
