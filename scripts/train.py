@@ -103,12 +103,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--model", default="matrix_factorizer", type=str)
+    parser.add_argument("--model", default="mf", type=str)
     parser.add_argument("--latent_dim", default=64, type=int)
     parser.add_argument("--resume_training", default=True, type=bool)
     parser.add_argument("--lr", default=1e-03, type=float)
     parser.add_argument("--batch_size", default=64, type=int)
     parser.add_argument("--num_epochs", default=10, type=int)
+    parser.add_argument("--init_embed_from_text", action=argparse.BooleanOptionalAction)
 
     args = parser.parse_args()
 
@@ -122,15 +123,17 @@ if __name__ == "__main__":
     num_items = dataset.get_num_items()
     texts = dataset.get_article_texts()
 
-    if args.model == "matrix_factorizer":
+    if args.model == "mf":
         model = MatrixFactorizer(num_users, num_items, args.latent_dim)
     elif args.model == "ncf":
         model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim)
-        model.init_weights_from_text(texts)
     else:
         raise ValueError(f"{args.model} not implemented")
+    
+    if args.init_embed_from_text:
+        model.init_weights_from_text(texts)
 
-    out_dir = Path(f"training_results_{args.model}")
+    out_dir = Path(f"training_results_{args.model}{'_wtextembeds' if args.init_embed_from_text else ''}")
     out_dir.mkdir(exist_ok=True)
 
     if args.resume_training:
