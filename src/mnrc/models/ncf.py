@@ -7,12 +7,12 @@ class NeuralMatrixFactorizer(nn.Module):
     def __init__(self, num_users: int, num_items: int, latent_dim: int):
         super().__init__()
 
+        self.latent_dim = latent_dim
+
         self.user_matrix_gmf = nn.Embedding(num_users, latent_dim)
         self.item_matrix_gmf = nn.Embedding(num_items, latent_dim)
         self.user_matrix_mlp = nn.Embedding(num_users, latent_dim)
         self.item_matrix_mlp = nn.Embedding(num_items, latent_dim)
-
-        self.embedding_proj = nn.Linear(384, latent_dim)
 
         self.mlp = nn.Sequential(
             nn.Linear(2*latent_dim, latent_dim),
@@ -23,11 +23,13 @@ class NeuralMatrixFactorizer(nn.Module):
         self.linear = nn.Linear(2*latent_dim, 1)
         self.sigmoid = nn.Sigmoid()
 
-    def init_weights_from_text(self, article_texts):
+    def init_weights_from_text_pca(self, article_texts):
         print("INITIALIZING ITEM EMBEDDINGS USING TEXT EMBEDDINGS (MIGHT TAKE SOME TIME)")
         model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-        embeddings = model.encode(article_texts, convert_to_tensor=True)
-        embeddings = self.embedding_proj(embeddings.to(self.embedding_proj.weight.data.device))
+        device = self.item_matrix_gmf.weight.data.device
+        embeddings = model.encode(article_texts, convert_to_tensor=True).to(device)
+        _, _, V = torch.pca_lowrank(embeddings, q=self.latent_dim)
+        embeddings = embeddings @ V
         self.item_matrix_gmf.weight.data = embeddings
         self.item_matrix_mlp.weight.data = embeddings
         print("INITIALIZATION DONE")
@@ -35,8 +37,8 @@ class NeuralMatrixFactorizer(nn.Module):
     def forward(self, user_ids, item_ids):
 
         user_vecs_gmf = self.user_matrix_gmf.weight[user_ids].squeeze(dim=1)
-        content_vecs_gmf = self.item_matrix_gmf.weight[item_ids].squeeze(dim=1)
-        logits_gmf = user_vecs_gmf*content_vecs_gmf
+        item_vecs_gmf = self.item_matrix_gmf.weight[item_ids].squeeze(dim=1)
+        logits_gmf = user_vecs_gmf*item_vecs_gmf
 
         user_vecs_mlp = self.user_matrix_mlp.weight[user_ids].squeeze(dim=1)
         item_vecs_mlp = self.item_matrix_mlp.weight[item_ids].squeeze(dim=1)

@@ -109,7 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", default=1e-03, type=float)
     parser.add_argument("--batch_size", default=64, type=int)
     parser.add_argument("--num_epochs", default=10, type=int)
-    parser.add_argument("--init_embed_from_text", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--init_embed_from_text_pca", action=argparse.BooleanOptionalAction)
 
     args = parser.parse_args()
 
@@ -130,8 +130,8 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"{args.model} not implemented")
     
-    if args.init_embed_from_text:
-        model.init_weights_from_text(texts)
+    if args.init_embed_from_text_pca:
+        model.init_weights_from_text_pca(texts)
 
     out_dir = Path(f"training_results_{args.model}{'_wtextembeds' if args.init_embed_from_text else ''}")
     out_dir.mkdir(exist_ok=True)
