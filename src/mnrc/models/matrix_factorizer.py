@@ -1,32 +1,43 @@
 import torch
 import torch.nn as nn
+from .pca_projector import PCAProjector
 from sentence_transformers import SentenceTransformer
 
 class MatrixFactorizer(nn.Module):
 
-    def __init__(self, num_users: int, num_items: int, latent_dim: int):
+    def __init__(
+            self, 
+            num_users: int, 
+            num_items: int, 
+            latent_dim: int,
+            learn_projection: bool = True
+            ):
         super().__init__()
 
         self.latent_dim = latent_dim
+        self.text_encoder = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+        self.text_encoder.requires_grad_(False)
+        
+        if learn_projection:
+            self.text_projector = nn.Linear(384, latent_dim)
+        else:
+            self.text_projector = PCAProjector(latent_dim)
+
         self.user_matrix = nn.Embedding(num_users, latent_dim)
         self.item_matrix = nn.Embedding(num_items, latent_dim)
         self.sigmoid = nn.Sigmoid()
 
-    def init_weights_from_text_pca(self, article_texts):
-        print("INITIALIZING ITEM EMBEDDINGS USING TEXT EMBEDDINGS (MIGHT TAKE SOME TIME)")
-        model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-        device = self.item_matrix.weight.data.device
-        embeddings = model.encode(article_texts, convert_to_tensor=True).to(device)
-        _, _, V = torch.pca_lowrank(embeddings, q=self.latent_dim)
-        embeddings = embeddings @ V
-        self.item_matrix.weight.data = embeddings
-        print("INITIALIZATION DONE")
+    def forward(self, user_ids, content_ids, encoded_text=None):
 
-    def forward(self, user_ids, content_ids):
+        user_vecs = self.user_matrix.weight[user_ids].squeeze(dim=1)
+        content_vecs = self.item_matrix.weight[content_ids].squeeze(dim=1)
 
-        user_vecs = self.user_matrix.weight[user_ids]
-        content_vecs = self.item_matrix.weight[content_ids]
-        logits = self.sigmoid((user_vecs*content_vecs).sum(dim=-1))
+        if encoded_text is not None:
+            encoded_text = self.text_projector(encoded_text)
+        else:
+            encoded_text = torch.zeros_like(content_vecs).to(content_ids.device)
 
-        return logits
+        logits = self.sigmoid((user_vecs*(content_vecs+encoded_text)).sum(dim=-1))
+
+        return logits[:, None]
     

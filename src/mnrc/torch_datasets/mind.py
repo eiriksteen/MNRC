@@ -2,6 +2,7 @@ import torch
 import pandas as pd
 from pathlib import Path
 from torch.utils.data import Dataset
+from sentence_transformers import SentenceTransformer
 
 class MINDDataset(Dataset):
 
@@ -31,6 +32,11 @@ class MINDDataset(Dataset):
                                 ". "+self.news_df["Category"]+ \
                                     ". "+self.news_df["SubCategory"]+ \
                                         ". "+self.news_df["Abstract"]
+        
+        self.text_encoder = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+        self.encoded_texts = self.text_encoder.encode(
+            self.get_article_texts(),
+            convert_to_tensor=True).detach().cpu().numpy()
 
     def __len__(self):
         return len(self.behaviors)
@@ -40,16 +46,19 @@ class MINDDataset(Dataset):
         key, score = self.behaviors[index]
         user, article, _ = key.split("-")
         user_id, article_id = self.user_to_id[user], self.article_to_id[article]
+        encoded_text = self.encoded_texts[article_id]
 
         if self.to_torch:
             user_id = torch.Tensor([user_id]).long()
             article_id = torch.Tensor([article_id]).long()
             score = torch.Tensor([score]).float()
+            encoded_text = torch.Tensor(encoded_text)
 
         sample = {
             "user_id": user_id,
             "article_id": article_id,
-            "score": score
+            "score": score,
+            "encoded_text": encoded_text
         }   
         
         return sample
@@ -64,6 +73,9 @@ class MINDDataset(Dataset):
         texts = [t if not pd.isna(t) else "" for t in self.news_df["All Text"].tolist()]
         assert len(texts) == self.get_num_items()
         return texts
+    
+    def get_article_encoded_texts(self):
+        return self.encoded_texts
 
     def get_id_dicts(self):
         

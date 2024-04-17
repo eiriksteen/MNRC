@@ -1,13 +1,24 @@
 import torch
 import torch.nn as nn
-from sentence_transformers import SentenceTransformer
+from .pca_projector import PCAProjector
 
 class NeuralMatrixFactorizer(nn.Module):
 
-    def __init__(self, num_users: int, num_items: int, latent_dim: int):
+    def __init__(
+            self, 
+            num_users: int, 
+            num_items: int, 
+            latent_dim: int,
+            learn_projection: bool = True
+            ):
         super().__init__()
 
         self.latent_dim = latent_dim
+
+        if learn_projection:
+            self.text_projector = nn.Linear(384, latent_dim)
+        else:
+            self.text_projector = PCAProjector(latent_dim)
 
         self.user_matrix_gmf = nn.Embedding(num_users, latent_dim)
         self.item_matrix_gmf = nn.Embedding(num_items, latent_dim)
@@ -23,27 +34,22 @@ class NeuralMatrixFactorizer(nn.Module):
         self.linear = nn.Linear(2*latent_dim, 1)
         self.sigmoid = nn.Sigmoid()
 
-    def init_weights_from_text_pca(self, article_texts):
-        print("INITIALIZING ITEM EMBEDDINGS USING TEXT EMBEDDINGS (MIGHT TAKE SOME TIME)")
-        model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-        device = self.item_matrix_gmf.weight.data.device
-        embeddings = model.encode(article_texts, convert_to_tensor=True).to(device)
-        _, _, V = torch.pca_lowrank(embeddings, q=self.latent_dim)
-        embeddings = embeddings @ V
-        self.item_matrix_gmf.weight.data = embeddings
-        self.item_matrix_mlp.weight.data = embeddings
-        print("INITIALIZATION DONE")
 
-    def forward(self, user_ids, item_ids):
+    def forward(self, user_ids, item_ids, encoded_text=None):
+
+        if encoded_text is not None:
+            encoded_text = self.text_projector(encoded_text)
+        else:
+            encoded_text = torch.zeros_like(item_vecs_gmf).to(item_ids.device)
 
         user_vecs_gmf = self.user_matrix_gmf.weight[user_ids].squeeze(dim=1)
         item_vecs_gmf = self.item_matrix_gmf.weight[item_ids].squeeze(dim=1)
-        logits_gmf = user_vecs_gmf*item_vecs_gmf
+        logits_gmf = user_vecs_gmf*(item_vecs_gmf+encoded_text)
 
         user_vecs_mlp = self.user_matrix_mlp.weight[user_ids].squeeze(dim=1)
         item_vecs_mlp = self.item_matrix_mlp.weight[item_ids].squeeze(dim=1)
-        logits_mlp = self.mlp(torch.cat((user_vecs_mlp, item_vecs_mlp), dim=-1))
+        logits_mlp = self.mlp(torch.cat((user_vecs_mlp, item_vecs_mlp+encoded_text), dim=-1))
 
         logits = self.sigmoid(self.linear(torch.cat((logits_gmf, logits_mlp), dim=-1)))
 
-        return logits
+        return logits[:,None]

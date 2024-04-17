@@ -24,20 +24,19 @@ def train(
         model, 
         train_data, 
         validation_data,
-        lr,
-        batch_size,
-        num_epochs,
+        args,
         out_dir
     ):
 
     model = model.to(DEVICE)
-    train_loader = DataLoader(train_data, batch_size, shuffle=True)
-    val_loader = DataLoader(validation_data, batch_size)
+    train_loader = DataLoader(train_data, args.batch_size, shuffle=True)
+    val_loader = DataLoader(validation_data, args.batch_size)
     loss_func = nn.BCELoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     min_val_loss = float("inf")
+    add_text = args.add_embeds_from_text_pca or args.add_embeds_from_text_linear
 
-    for epoch in range(num_epochs): 
+    for epoch in range(args.num_epochs): 
         print(f"RUNNING EPOCH {epoch+1}")
         
         model.train()
@@ -46,9 +45,10 @@ def train(
             
             user_ids = batch["user_id"].to(DEVICE)
             article_ids = batch["article_id"].to(DEVICE)
+            encoded_text = batch["encoded_text"].to(DEVICE) if add_text else None
             scores = batch["score"].to(DEVICE)
 
-            logits = model(user_ids, article_ids)
+            logits = model(user_ids, article_ids, encoded_text)
             loss = loss_func(logits, scores)
 
             optimizer.zero_grad()
@@ -64,9 +64,10 @@ def train(
 
                 user_ids = batch["user_id"].to(DEVICE)
                 article_ids = batch["article_id"].to(DEVICE)
+                encoded_text = batch["encoded_text"].to(DEVICE) if add_text else None
                 scores = batch["score"].to(DEVICE)
 
-                logits = model(user_ids, article_ids)
+                logits = model(user_ids, article_ids, encoded_text)
                 loss = loss_func(logits, scores)
                 valid_loss += loss.item()
 
@@ -105,11 +106,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--model", default="mf", type=str)
     parser.add_argument("--latent_dim", default=64, type=int)
-    parser.add_argument("--resume_training", default=True, type=bool)
     parser.add_argument("--lr", default=1e-03, type=float)
     parser.add_argument("--batch_size", default=64, type=int)
     parser.add_argument("--num_epochs", default=10, type=int)
-    parser.add_argument("--init_embed_from_text_pca", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--from_scratch", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--add_embeds_from_text_pca", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--add_embeds_from_text_linear", action=argparse.BooleanOptionalAction)
 
     args = parser.parse_args()
 
@@ -121,22 +123,27 @@ if __name__ == "__main__":
 
     num_users = dataset.get_num_users()
     num_items = dataset.get_num_items()
-    texts = dataset.get_article_texts()
+    encoded_texts = dataset.get_article_encoded_texts()
 
     if args.model == "mf":
-        model = MatrixFactorizer(num_users, num_items, args.latent_dim)
+        model = MatrixFactorizer(num_users, num_items, args.latent_dim, args.add_embeds_from_text_linear)
     elif args.model == "ncf":
-        model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim)
+        model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim, args.add_embeds_from_text_linear)
     else:
         raise ValueError(f"{args.model} not implemented")
-    
-    if args.init_embed_from_text_pca:
-        model.init_weights_from_text_pca(texts)
 
-    out_dir = Path(f"training_results_{args.model}{'_wtextembeds' if args.init_embed_from_text else ''}")
+    p = f"training_results_{args.model}"
+    if args.add_embeds_from_text_pca:
+        p = f"training_results_{args.model}_{'_pca'}"
+    elif args.add_embeds_from_text_linear:
+        p = f"training_results_{args.model}_{'_linear'}"
+    else:
+        p = f"training_results_{args.model}"
+
+    out_dir = Path(p)
     out_dir.mkdir(exist_ok=True)
 
-    if args.resume_training:
+    if not args.from_scratch:
         try:
             model.load_state_dict(torch.load(out_dir / "model"))
             print(f"Model found at {out_dir / 'model'}, resuming training")
@@ -149,8 +156,6 @@ if __name__ == "__main__":
         model,
         train_data,
         validation_data,
-        lr=args.lr,
-        batch_size=args.batch_size,
-        num_epochs=args.num_epochs,
+        args,
         out_dir=out_dir
     )
