@@ -3,6 +3,7 @@ import pandas as pd
 from pathlib import Path
 from torch.utils.data import Dataset
 from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
 
 class MINDDataset(Dataset):
 
@@ -13,6 +14,7 @@ class MINDDataset(Dataset):
             data_path: Path = Path("data")
         ):
 
+        print(f"Loading dataset from {data_path}")
         if split == "train":
             self.behaviors_df = pd.read_csv(data_path / "MINDsmall_train" / "behaviors.tsv", sep="\t")
             self.news_df = pd.read_csv(data_path / "MINDsmall_train" / "news.tsv", sep="\t")
@@ -36,7 +38,7 @@ class MINDDataset(Dataset):
         self.text_encoder = SentenceTransformer('paraphrase-MiniLM-L6-v2')
         self.encoded_texts = self.text_encoder.encode(
             self.get_article_texts(),
-            convert_to_tensor=True).detach().cpu().numpy()
+            convert_to_tensor=True, precision="binary", show_progress_bar=True).detach().cpu().numpy()
 
     def __len__(self):
         return len(self.behaviors)

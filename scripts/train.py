@@ -9,6 +9,7 @@ from pathlib import Path
 from mnrc.torch_datasets import MINDDataset
 from mnrc.models import MatrixFactorizer, NeuralMatrixFactorizer
 from pprint import pprint
+import numpy as np
 
 DEVICE = (
     "mps"
@@ -20,6 +21,34 @@ DEVICE = (
 
 print(f"USING DEVICE {DEVICE}")
 
+
+def mrr_score_old(y_true, y_score):
+    order = np.argsort(y_score)[::-1]
+    y_true = np.take(y_true, order)
+    rr_score = y_true / (np.arange(len(y_true)) + 1)
+    return np.sum(rr_score) / np.sum(y_true)
+
+def mrr_score(y_true, y_score):
+    order = np.argsort(y_score)[::-1]
+    y_true_sorted = np.take(y_true, order)
+    relevant_ranks = np.where(y_true_sorted == 1)[0] + 1
+    if len(relevant_ranks) == 0:
+        return 0.0
+    return np.mean(1 / relevant_ranks)
+
+
+def dcg_score(y_true, y_score, k=10):
+    order = np.argsort(y_score)[::-1]
+    y_true = np.take(y_true, order[:k])
+    gains = 2 ** y_true - 1
+    discounts = np.log2(np.arange(len(y_true)) + 2)
+    return np.sum(gains / discounts)
+
+def ndcg_score(y_true, y_score, k=10):
+    best = dcg_score(y_true, y_true, k)
+    actual = dcg_score(y_true, y_score, k)
+    return actual / best
+
 def train(
         model, 
         train_data, 
@@ -27,6 +56,8 @@ def train(
         args,
         out_dir
     ):
+
+    print("TRAINING MODEL")
 
     model = model.to(DEVICE)
     train_loader = DataLoader(train_data, args.batch_size, shuffle=True)
@@ -77,6 +108,9 @@ def train(
         a = accuracy_score(total_scores, total_preds)
         p, r, f, s = precision_recall_fscore_support(total_scores, total_preds)
         auc = roc_auc_score(total_scores, total_preds)
+        mrr = mrr_score(total_scores, total_preds)
+        ndcg = ndcg_score(total_scores, total_preds)
+        dcg = dcg_score(total_scores, total_preds)
         
         metrics = {
             "train_loss": train_loss / len(train_loader),
@@ -86,7 +120,10 @@ def train(
             "recall": r.tolist(),
             "f1": f.tolist(),
             "auc": auc,
-            "support": s.tolist()
+            "support": s.tolist(),
+            "mrr": mrr,
+            "ndcg": ndcg,
+            "dcg": dcg
         }
 
         if metrics["valid_loss"] < min_val_loss:
