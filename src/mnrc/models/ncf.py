@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from .pca_projector import PCAProjector
 
 class NeuralMatrixFactorizer(nn.Module):
 
@@ -8,18 +7,17 @@ class NeuralMatrixFactorizer(nn.Module):
             self, 
             num_users: int, 
             num_items: int, 
-            latent_dim: int,
-            learn_projection: bool = True
+            latent_dim: int
             ):
         super().__init__()
 
         self.latent_dim = latent_dim
 
-        if learn_projection:
-            self.text_projector = nn.Linear(384, latent_dim)
-        else:
-            self.text_projector = PCAProjector(latent_dim)
-
+        self.text_projector = nn.Sequential(
+            nn.Linear(384, latent_dim),
+            nn.ReLU(),
+            nn.Linear(latent_dim, latent_dim)
+        )
         self.user_matrix_gmf = nn.Embedding(num_users, latent_dim)
         self.item_matrix_gmf = nn.Embedding(num_items, latent_dim)
         self.user_matrix_mlp = nn.Embedding(num_users, latent_dim)
@@ -52,4 +50,4 @@ class NeuralMatrixFactorizer(nn.Module):
 
         logits = self.sigmoid(self.linear(torch.cat((logits_gmf, logits_mlp), dim=-1)))
 
-        return logits[:,None]
+        return logits

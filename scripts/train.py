@@ -34,7 +34,6 @@ def train(
     loss_func = nn.BCELoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     min_val_loss = float("inf")
-    add_text = args.add_embeds_from_text_pca or args.add_embeds_from_text_linear
 
     for epoch in range(args.num_epochs): 
         print(f"RUNNING EPOCH {epoch+1}")
@@ -45,7 +44,7 @@ def train(
             
             user_ids = batch["user_id"].to(DEVICE)
             article_ids = batch["article_id"].to(DEVICE)
-            encoded_text = batch["encoded_text"].to(DEVICE) if add_text else None
+            encoded_text = batch["encoded_text"].to(DEVICE) if args.add_text else None
             scores = batch["score"].to(DEVICE)
 
             logits = model(user_ids, article_ids, encoded_text)
@@ -64,7 +63,7 @@ def train(
 
                 user_ids = batch["user_id"].to(DEVICE)
                 article_ids = batch["article_id"].to(DEVICE)
-                encoded_text = batch["encoded_text"].to(DEVICE) if add_text else None
+                encoded_text = batch["encoded_text"].to(DEVICE) if args.add_text else None
                 scores = batch["score"].to(DEVICE)
 
                 logits = model(user_ids, article_ids, encoded_text)
@@ -110,8 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", default=64, type=int)
     parser.add_argument("--num_epochs", default=10, type=int)
     parser.add_argument("--from_scratch", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--add_embeds_from_text_pca", action=argparse.BooleanOptionalAction)
-    parser.add_argument("--add_embeds_from_text_linear", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--add_text", action=argparse.BooleanOptionalAction)
 
     args = parser.parse_args()
 
@@ -126,17 +124,14 @@ if __name__ == "__main__":
     encoded_texts = dataset.get_article_encoded_texts()
 
     if args.model == "mf":
-        model = MatrixFactorizer(num_users, num_items, args.latent_dim, args.add_embeds_from_text_linear)
+        model = MatrixFactorizer(num_users, num_items, args.latent_dim)
     elif args.model == "ncf":
-        model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim, args.add_embeds_from_text_linear)
+        model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim)
     else:
         raise ValueError(f"{args.model} not implemented")
 
-    p = f"training_results_{args.model}"
-    if args.add_embeds_from_text_pca:
-        p = f"training_results_{args.model}_{'_pca'}"
-    elif args.add_embeds_from_text_linear:
-        p = f"training_results_{args.model}_{'_linear'}"
+    if args.add_text:
+        p = f"training_results_{args.model}_{'_wte'}"
     else:
         p = f"training_results_{args.model}"
 
