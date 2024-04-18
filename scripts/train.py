@@ -36,7 +36,6 @@ def mrr_score(y_true, y_score):
         return 0.0
     return np.mean(1 / relevant_ranks)
 
-
 def dcg_score(y_true, y_score, k=10):
     order = np.argsort(y_score)[::-1]
     y_true = np.take(y_true, order[:k])

@@ -38,7 +38,9 @@ class MINDDataset(Dataset):
         self.text_encoder = SentenceTransformer('paraphrase-MiniLM-L6-v2')
         self.encoded_texts = self.text_encoder.encode(
             self.get_article_texts(),
-            convert_to_tensor=True, precision="binary", show_progress_bar=True).detach().cpu().numpy()
+            convert_to_tensor=True,
+            precision="binary", 
+            show_progress_bar=True).detach().cpu().numpy()
 
     def __len__(self):
         return len(self.behaviors)
