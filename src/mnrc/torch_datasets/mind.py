@@ -16,8 +16,8 @@ class MINDDataset(Dataset):
 
         print(f"Loading dataset from {data_path}")
         if split == "train":
-            self.behaviors_df = pd.read_csv(data_path / "MINDsmall_train" / "behaviors.tsv", sep="\t")
-            self.news_df = pd.read_csv(data_path / "MINDsmall_train" / "news.tsv", sep="\t")
+            self.behaviors_df = pd.read_csv(data_path / "MINDsmall_train" / "behaviors.tsv", sep="\t")[:2000]
+            self.news_df = pd.read_csv(data_path / "MINDsmall_train" / "news.tsv", sep="\t")[:2000]
         elif split == "validation":
             self.behaviors_df = pd.read_csv(data_path / "MINDsmall_dev" / "behaviors.tsv", sep="\t")
             self.news_df = pd.read_csv(data_path / "MINDsmall_dev" / "news.tsv", sep="\t")

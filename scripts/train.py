@@ -11,6 +11,14 @@ from mnrc.models import MatrixFactorizer, NeuralMatrixFactorizer
 from pprint import pprint
 import numpy as np
 
+from sklearn.metrics import (
+    roc_auc_score,
+    log_loss,
+    mean_squared_error,
+    accuracy_score,
+    f1_score,
+)
+
 DEVICE = (
     "mps"
     if torch.backends.mps.is_available()
@@ -22,31 +30,199 @@ DEVICE = (
 print(f"USING DEVICE {DEVICE}")
 
 
-def mrr_score_old(y_true, y_score):
+# def mrr_score_old(y_true, y_score):
+#     order = np.argsort(y_score)[::-1]
+#     y_true = np.take(y_true, order)
+#     rr_score = y_true / (np.arange(len(y_true)) + 1)
+#     return np.sum(rr_score) / np.sum(y_true)
+
+# def mrr_score(y_true, y_score):
+#     order = np.argsort(y_score)[::-1]
+#     y_true_sorted = np.take(y_true, order)
+#     relevant_ranks = np.where(y_true_sorted == 1)[0] + 1
+#     if len(relevant_ranks) == 0:
+#         return 0.0
+#     return np.mean(1 / relevant_ranks)
+
+# def dcg_score(y_true, y_score, k=10):
+#     order = np.argsort(y_score)[::-1]
+#     y_true = np.take(y_true, order[:k])
+#     gains = 2 ** y_true - 1
+#     discounts = np.log2(np.arange(len(y_true)) + 2)
+#     return np.sum(gains / discounts)
+
+# def ndcg_score(y_true, y_score, k=10):
+#     best = dcg_score(y_true, y_true, k)
+#     actual = dcg_score(y_true, y_score, k)
+#     return actual / best
+
+
+
+def mrr_score(y_true, y_score):
+    """Computing mrr score metric.
+
+    Args:
+        y_true (np.ndarray): Ground-truth labels.
+        y_score (np.ndarray): Predicted labels.
+
+    Returns:
+        numpy.ndarray: mrr scores.
+    """
     order = np.argsort(y_score)[::-1]
     y_true = np.take(y_true, order)
     rr_score = y_true / (np.arange(len(y_true)) + 1)
     return np.sum(rr_score) / np.sum(y_true)
 
-def mrr_score(y_true, y_score):
-    order = np.argsort(y_score)[::-1]
-    y_true_sorted = np.take(y_true, order)
-    relevant_ranks = np.where(y_true_sorted == 1)[0] + 1
-    if len(relevant_ranks) == 0:
-        return 0.0
-    return np.mean(1 / relevant_ranks)
-
-def dcg_score(y_true, y_score, k=10):
-    order = np.argsort(y_score)[::-1]
-    y_true = np.take(y_true, order[:k])
-    gains = 2 ** y_true - 1
-    discounts = np.log2(np.arange(len(y_true)) + 2)
-    return np.sum(gains / discounts)
 
 def ndcg_score(y_true, y_score, k=10):
+    """Computing ndcg score metric at k.
+
+    Args:
+        y_true (np.ndarray): Ground-truth labels.
+        y_score (np.ndarray): Predicted labels.
+
+    Returns:
+        numpy.ndarray: ndcg scores.
+    """
     best = dcg_score(y_true, y_true, k)
     actual = dcg_score(y_true, y_score, k)
     return actual / best
+
+
+def hit_score(y_true, y_score, k=10):
+    """Computing hit score metric at k.
+
+    Args:
+        y_true (np.ndarray): ground-truth labels.
+        y_score (np.ndarray): predicted labels.
+
+    Returns:
+        np.ndarray: hit score.
+    """
+    ground_truth = np.where(y_true == 1)[0]
+    argsort = np.argsort(y_score)[::-1][:k]
+    for idx in argsort:
+        if idx in ground_truth:
+            return 1
+    return 0
+
+
+def dcg_score(y_true, y_score, k=10):
+    """Computing dcg score metric at k.
+
+    Args:
+        y_true (np.ndarray): Ground-truth labels.
+        y_score (np.ndarray): Predicted labels.
+
+    Returns:
+        np.ndarray: dcg scores.
+    """
+    print("y true shape", np.shape(y_true))
+    print("y score shape", np.shape(y_score))
+
+    k = min(len(y_true), k)
+    order = np.argsort(y_score)[::-1]
+    y_true = np.take(y_true, order[:k])
+    gains = 2**y_true - 1
+    discounts = np.log2(np.arange(len(y_true)) + 2)
+    return np.sum(gains / discounts)
+
+
+
+def cal_metric(labels, preds, metrics):
+    """Calculate metrics.
+
+    Available options are: `auc`, `rmse`, `logloss`, `acc` (accurary), `f1`, `mean_mrr`,
+    `ndcg` (format like: ndcg@2;4;6;8), `hit` (format like: hit@2;4;6;8), `group_auc`.
+
+    Args:
+        labels (array-like): Labels.
+        preds (array-like): Predictions.
+        metrics (list): List of metric names.
+
+    Return:
+        dict: Metrics.
+
+    Examples:
+        >>> cal_metric(labels, preds, ["ndcg@2;4;6", "group_auc"])
+        {'ndcg@2': 0.4026, 'ndcg@4': 0.4953, 'ndcg@6': 0.5346, 'group_auc': 0.8096}
+
+    """
+    res = {}
+    for metric in metrics:
+        print("Current metric", metric)
+        if metric == "auc":
+            auc = roc_auc_score(np.asarray(labels), np.asarray(preds))
+            res["auc"] = round(auc, 4)
+        elif metric == "rmse":
+            rmse = mean_squared_error(np.asarray(labels), np.asarray(preds))
+            res["rmse"] = np.sqrt(round(rmse, 4))
+        elif metric == "logloss":
+            # avoid logloss nan
+            preds = [max(min(p, 1.0 - 10e-12), 10e-12) for p in preds]
+            logloss = log_loss(np.asarray(labels), np.asarray(preds))
+            res["logloss"] = round(logloss, 4)
+        elif metric == "acc":
+            pred = np.asarray(preds)
+            pred[pred >= 0.5] = 1
+            pred[pred < 0.5] = 0
+            acc = accuracy_score(np.asarray(labels), pred)
+            res["acc"] = round(acc, 4)
+        elif metric == "f1":
+            pred = np.asarray(preds)
+            pred[pred >= 0.5] = 1
+            pred[pred < 0.5] = 0
+            f1 = f1_score(np.asarray(labels), pred)
+            res["f1"] = round(f1, 4)
+        elif metric == "mean_mrr":
+            mean_mrr = np.mean(
+                [
+                    mrr_score(each_labels, each_preds)
+                    for each_labels, each_preds in zip(labels, preds)
+                ]
+                # [mrr_score(labels, preds)]
+            )
+            res["mean_mrr"] = round(mean_mrr, 4)
+        elif metric.startswith("ndcg"):  # format like:  ndcg@2;4;6;8
+            ndcg_list = [1, 2]
+            ks = metric.split("@")
+            if len(ks) > 1:
+                ndcg_list = [int(token) for token in ks[1].split(";")]
+            for k in ndcg_list:
+                ndcg_temp = np.mean(
+                    [
+                        ndcg_score(each_labels, each_preds, k)
+                        for each_labels, each_preds in zip(labels, preds)
+                    ]
+                    # [ndcg_score(labels, preds, k)]
+                )
+                res["ndcg@{0}".format(k)] = round(ndcg_temp, 4)
+        elif metric.startswith("hit"):  # format like:  hit@2;4;6;8
+            hit_list = [1, 2]
+            ks = metric.split("@")
+            if len(ks) > 1:
+                hit_list = [int(token) for token in ks[1].split(";")]
+            for k in hit_list:
+                hit_temp = np.mean(
+                    [
+                        hit_score(each_labels, each_preds, k)
+                        for each_labels, each_preds in zip(labels, preds)
+                    ]
+                )
+                res["hit@{0}".format(k)] = round(hit_temp, 4)
+        elif metric == "group_auc":
+            group_auc = np.mean(
+                [
+                    roc_auc_score(each_labels, each_preds)
+                    for each_labels, each_preds in zip(labels, preds)
+                ]
+            )
+            res["group_auc"] = round(group_auc, 4)
+        else:
+            raise ValueError("Metric {0} not defined".format(metric))
+        
+        print(res)
+    return res
 
 def train(
         model, 
@@ -88,8 +264,11 @@ def train(
         model.eval()
         valid_loss = 0
         total_preds, total_scores = [], []
+
         with torch.no_grad():
             for batch in tqdm(val_loader):
+                print("batch length")
+                print(len(batch))
 
                 user_ids = batch["user_id"].to(DEVICE)
                 article_ids = batch["article_id"].to(DEVICE)
@@ -100,28 +279,54 @@ def train(
                 loss = loss_func(logits, scores)
                 valid_loss += loss.item()
 
-                total_preds += torch.where(logits > 0.5, 1, 0).squeeze().detach().cpu().tolist()
-                total_scores += scores.squeeze().detach().cpu().tolist()
 
-        a = accuracy_score(total_scores, total_preds)
-        p, r, f, s = precision_recall_fscore_support(total_scores, total_preds)
-        auc = roc_auc_score(total_scores, total_preds)
-        mrr = mrr_score(total_scores, total_preds)
-        ndcg = ndcg_score(total_scores, total_preds)
-        dcg = dcg_score(total_scores, total_preds)
+                print("logits shape", logits.shape)
+
+                total_preds.append(torch.where(logits > 0.5, 1, 0).squeeze().detach().cpu().tolist())
+                total_scores.append(scores.squeeze().detach().cpu().tolist())
+
+        preds_flat = [item for sublist in total_preds for item in sublist]
+        scores_flat = [item for sublist in total_scores for item in sublist]
         
+        total_preds = total_preds[:-1]
+        total_scores = total_scores[:-1]
+
+        # a = accuracy_score(total_scores, total_preds)
+        # p, r, f, s = precision_recall_fscore_support(total_scores, total_preds)
+        auc = roc_auc_score(scores_flat, preds_flat)
+        # mrr = mrr_score(total_scores, total_preds)
+        # ndcg = ndcg_score(total_scores, total_preds)
+        # dcg = dcg_score(total_scores, total_preds)
+
+        print(total_preds)
+        print(len(total_preds))
+        print(len(total_preds[0]))
+
+        metrics_dict = cal_metric(total_scores, total_preds, ["ndcg", "mean_mrr"])
+
+        print("Metrics")
+        print(metrics_dict)
+        
+        # metrics = {
+        #     "train_loss": train_loss / len(train_loader),
+        #     "valid_loss": valid_loss / len(val_loader),
+        #     "accuracy": a,
+        #     "precision": p.tolist(),
+        #     "recall": r.tolist(),
+        #     "f1": f.tolist(),
+        #     "auc": auc,
+        #     "support": s.tolist(),
+        #     "mrr": mrr,
+        #     "ndcg": ndcg,
+        #     "dcg": dcg
+        # }
+
         metrics = {
             "train_loss": train_loss / len(train_loader),
             "valid_loss": valid_loss / len(val_loader),
-            "accuracy": a,
-            "precision": p.tolist(),
-            "recall": r.tolist(),
-            "f1": f.tolist(),
+            "ndcg": metrics_dict["ndcg@1"],
             "auc": auc,
-            "support": s.tolist(),
-            "mrr": mrr,
-            "ndcg": ndcg,
-            "dcg": dcg
+            "auc2": cal_metric(total_scores, total_preds, ["auc"])["auc"]
         }
 
         if metrics["valid_loss"] < min_val_loss:
