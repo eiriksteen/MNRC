@@ -162,12 +162,17 @@ if __name__ == "__main__":
     if args.model == "mf":
         model = MatrixFactorizer(num_users, num_items, args.latent_dim)
     elif args.model == "ncf":
-        model = NeuralMatrixFactorizer(num_users, num_items, args.latent_dim)
+        model = NeuralMatrixFactorizer(
+            num_users, 
+            num_items, 
+            args.latent_dim,
+            args.add_text
+        )
     else:
         raise ValueError(f"{args.model} not implemented")
 
     if args.add_text:
-        p = f"training_results_{args.model}_{'_wte'}"
+        p = f"training_results_{args.model}_wte_new"
     else:
         p = f"training_results_{args.model}"
 

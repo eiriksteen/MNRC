@@ -8,18 +8,16 @@ class MatrixFactorizer(nn.Module):
             self, 
             num_users: int, 
             num_items: int, 
-            latent_dim: int
+            latent_dim: int,
+            wtext: bool = False
             ):
         super().__init__()
 
         self.latent_dim = latent_dim
+        self.wtext = wtext
         self.text_encoder = SentenceTransformer('paraphrase-MiniLM-L6-v2')
         self.text_encoder.requires_grad_(False)
-        self.text_projector = nn.Sequential(
-            nn.Linear(384, latent_dim),
-            nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim)
-        )
+        self.text_projector = nn.Linear(384, latent_dim) if wtext else None
         self.user_matrix = nn.Embedding(num_users, latent_dim)
         self.item_matrix = nn.Embedding(num_items, latent_dim)
         self.sigmoid = nn.Sigmoid()
