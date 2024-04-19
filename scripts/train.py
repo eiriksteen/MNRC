@@ -149,15 +149,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    dataset = MINDDataset(
+    train_data = MINDDataset(
         "train", 
         to_torch=True, 
         data_path=Path("data")
     )
 
-    num_users = dataset.get_num_users()
-    num_items = dataset.get_num_items()
-    encoded_texts = dataset.get_article_encoded_texts()
+    validation_data = MINDDataset(
+        "validation", 
+        to_torch=True, 
+        data_path=Path("data")
+    )
+
+    num_users = train_data.get_num_users()
+    num_items = train_data.get_num_items()
+    encoded_texts = train_data.get_article_encoded_texts()
 
     if args.model == "mf":
         model = MatrixFactorizer(num_users, num_items, args.latent_dim)
@@ -180,8 +186,6 @@ if __name__ == "__main__":
             print(f"Model found at {out_dir / 'model'}, resuming training")
         except FileNotFoundError:
             print(f"No model found at {out_dir / 'model'}, training from scratch")
-
-    train_data, validation_data = random_split(dataset, [0.8, 0.2])
 
     train(
         model,
