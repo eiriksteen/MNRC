@@ -7,47 +7,55 @@ class NeuralMatrixFactorizer(nn.Module):
             self, 
             num_users: int, 
             num_items: int, 
-            latent_dim: int
+            latent_dim: int,
+            wtext: bool = False
             ):
         super().__init__()
 
         self.latent_dim = latent_dim
+        self.wtext = wtext
 
-        self.text_projector = nn.Sequential(
-            nn.Linear(384, latent_dim),
-            nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim)
-        )
+        self.text_projector = nn.Linear(384, latent_dim) if wtext else nn.Identity()
         self.user_matrix_gmf = nn.Embedding(num_users, latent_dim)
         self.item_matrix_gmf = nn.Embedding(num_items, latent_dim)
-        self.user_matrix_mlp = nn.Embedding(num_users, latent_dim)
-        self.item_matrix_mlp = nn.Embedding(num_items, latent_dim)
+        self.user_matrix_nl = nn.Embedding(num_users, latent_dim)
+        self.item_matrix_nl = nn.Embedding(num_items, latent_dim)
 
         self.mlp = nn.Sequential(
             nn.Linear(2*latent_dim, latent_dim),
             nn.ReLU(),
-            nn.Linear(latent_dim, latent_dim),
+            nn.Linear(latent_dim, latent_dim)
         )
 
-        self.linear = nn.Linear(2*latent_dim, 1)
+        self.text_mlp = nn.Sequential(
+            nn.Linear(3*latent_dim, latent_dim),
+            nn.ReLU(),
+            nn.Linear(latent_dim, latent_dim)
+        ) if wtext else nn.Identity()
+
+        self.linear = nn.Linear((3 if wtext else 2)*latent_dim, 1)
         self.sigmoid = nn.Sigmoid()
 
 
     def forward(self, user_ids, item_ids, encoded_text=None):
 
-        if encoded_text is not None:
-            encoded_text = self.text_projector(encoded_text)
-        else:
-            encoded_text = torch.zeros_like(item_vecs_gmf).to(item_ids.device)
-
         user_vecs_gmf = self.user_matrix_gmf.weight[user_ids].squeeze(dim=1)
         item_vecs_gmf = self.item_matrix_gmf.weight[item_ids].squeeze(dim=1)
-        logits_gmf = user_vecs_gmf*(item_vecs_gmf+encoded_text)
+        user_vecs_nl = self.user_matrix_nl.weight[user_ids].squeeze(dim=1)
+        item_vecs_nl = self.item_matrix_nl.weight[item_ids].squeeze(dim=1)
 
-        user_vecs_mlp = self.user_matrix_mlp.weight[user_ids].squeeze(dim=1)
-        item_vecs_mlp = self.item_matrix_mlp.weight[item_ids].squeeze(dim=1)
-        logits_mlp = self.mlp(torch.cat((user_vecs_mlp, item_vecs_mlp+encoded_text), dim=-1))
+        logits_gmf = user_vecs_gmf*item_vecs_gmf
+        logits_nl = self.mlp(torch.cat((user_vecs_nl, item_vecs_nl), dim=-1))
 
-        logits = self.sigmoid(self.linear(torch.cat((logits_gmf, logits_mlp), dim=-1)))
+        if encoded_text is not None and self.wtext:
+            encoded_text = self.text_projector(encoded_text)
+            logits_text = self.text_mlp(torch.cat((user_vecs_gmf, item_vecs_gmf, encoded_text), dim=-1))
+        elif self.wtext:
+            logits_text = torch.zeros_like(logits_gmf).to(logits_gmf.device)
+
+        if self.wtext:
+            logits = self.sigmoid(self.linear(torch.cat((logits_gmf, logits_nl, logits_text), dim=-1)))
+        else:
+            logits = self.sigmoid(self.linear(torch.cat((logits_gmf, logits_nl), dim=-1)))
 
         return logits

@@ -39,7 +39,6 @@ class MINDDataset(Dataset):
         self.encoded_texts = self.text_encoder.encode(
             self.get_article_texts(),
             convert_to_tensor=True,
-            precision="binary", 
             show_progress_bar=True).detach().cpu().numpy()
 
     def __len__(self):
