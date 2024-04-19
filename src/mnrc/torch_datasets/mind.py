@@ -28,7 +28,7 @@ class MINDDataset(Dataset):
         self.news_df.columns = ["News ID", "Category", "SubCategory", "Title", "Abstract", "URL", "Title Entities", "Abstract Entities"]
         self.to_torch = to_torch
         self.user_to_id, self.id_to_user, self.article_to_id, self.id_to_article = self.get_id_dicts()
-        self.behaviors = self.preprocess_behaviors()
+        self.behaviors_processed = self.preprocess_behaviors()
 
         self.news_df["All Text"] = self.news_df["Title"]+ \
                                 ". "+self.news_df["Category"]+ \
@@ -42,11 +42,11 @@ class MINDDataset(Dataset):
             show_progress_bar=True).detach().cpu().numpy()
 
     def __len__(self):
-        return len(self.behaviors)
+        return len(self.behaviors_processed)
     
     def __getitem__(self, index):
 
-        key, score = self.behaviors[index]
+        key, score = self.behaviors_processed[index]
         user, article, _ = key.split("-")
         user_id, article_id = self.user_to_id[user], self.article_to_id[article]
         encoded_text = self.encoded_texts[article_id]
