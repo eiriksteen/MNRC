@@ -11,7 +11,8 @@ class MINDDataset(Dataset):
             self,
             split: str,
             to_torch: bool = True,
-            data_path: Path = Path("data")
+            data_path: Path = Path("data"),
+            include_encoded_text: bool = True
         ):
 
         print(f"Loading dataset from {data_path}")
@@ -27,6 +28,7 @@ class MINDDataset(Dataset):
         self.behaviors_df.columns = ["Impression ID", "User ID", "Time", "History", "Impressions"]
         self.news_df.columns = ["News ID", "Category", "SubCategory", "Title", "Abstract", "URL", "Title Entities", "Abstract Entities"]
         self.to_torch = to_torch
+        self.include_encoded_text = include_encoded_text
         self.user_to_id, self.id_to_user, self.article_to_id, self.id_to_article = self.get_id_dicts()
         self.behaviors_processed = self.preprocess_behaviors()
 
@@ -35,11 +37,13 @@ class MINDDataset(Dataset):
                                     ". "+self.news_df["SubCategory"]+ \
                                         ". "+self.news_df["Abstract"]
         
-        self.text_encoder = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-        self.encoded_texts = self.text_encoder.encode(
-            self.get_article_texts(),
-            convert_to_tensor=True,
-            show_progress_bar=True).detach().cpu().numpy()
+        if include_encoded_text:
+            self.text_encoder = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+            self.encoded_texts = self.text_encoder.encode(
+                self.get_article_texts(),
+                convert_to_tensor=True,
+                show_progress_bar=True
+            ).detach().cpu().numpy()
 
     def __len__(self):
         return len(self.behaviors_processed)
@@ -49,20 +53,22 @@ class MINDDataset(Dataset):
         key, score = self.behaviors_processed[index]
         user, article, _ = key.split("-")
         user_id, article_id = self.user_to_id[user], self.article_to_id[article]
-        encoded_text = self.encoded_texts[article_id]
+        encoded_text = self.encoded_texts[article_id] if self.include_encoded_text else None
 
         if self.to_torch:
             user_id = torch.Tensor([user_id]).long()
             article_id = torch.Tensor([article_id]).long()
             score = torch.Tensor([score]).float()
-            encoded_text = torch.Tensor(encoded_text)
+            encoded_text = torch.Tensor(encoded_text) if self.include_encoded_text else None
 
         sample = {
             "user_id": user_id,
             "article_id": article_id,
-            "score": score,
-            "encoded_text": encoded_text
+            "score": score
         }   
+
+        if self.include_encoded_text:
+            sample["encoded_text"] = encoded_text
         
         return sample
     
@@ -91,6 +97,9 @@ class MINDDataset(Dataset):
         id_to_article = {i: article for i, article in enumerate(articles)}
 
         return user_to_id, id_to_user, article_to_id, id_to_article
+    
+    def get_impressions(self):
+        return self.behaviors_df[["User ID", "Impressions"]].values.tolist()
     
     def preprocess_behaviors(self):
 

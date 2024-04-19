@@ -1,31 +1,7 @@
-from mnrc.models import MatrixFactorizer, NeuralMatrixFactorizer
-import pandas as pd
-from pathlib import Path
 import numpy as np
-from sentence_transformers import SentenceTransformer
 import torch
-from mnrc.torch_datasets import MINDDataset
-
-
-def process_impression(s: str):
-    list_of_strings = s.split(" ")
-    itemid_rel_tuple = [l.split("-") for l in list_of_strings]
-    click = None
-    noclicks = []
-    for entry in itemid_rel_tuple:
-        if entry[1] =='0':
-            noclicks.append(entry[0])
-        if entry[1] =='1':
-            click = entry[0]
-    return noclicks, click
-
-def get_impression_df(self, data_path: Path = Path("data"), split: str = "MINDsmall_validation"):
-    behaviors_df = pd.read_csv(data_path / split / "behaviors.tsv", sep="\t")
-    behaviors_df.columns = ["Impression ID", "User ID", "Time", "History", "Impressions"]
-    
-    behaviors_df['Noclicks'], behaviors_df['Click'] = zip(*behaviors_df['Impressions'].map(process_impression))
-
-    return behaviors_df
+from tqdm import tqdm
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score
 
 def mrr_score(y_true, y_score):
     order = np.argsort(y_score)[::-1]
@@ -47,45 +23,70 @@ def ndcg_score(y_true, y_score, k=10):
     actual = dcg_score(y_true, y_score, k)
     return actual / best
 
-def get_article_texts(article_ids, data_path: Path = Path("data")):
-    news_df = pd.read_csv(data_path / "MINDsmall_dev" / "news.tsv", sep="\t")
-    news_df.columns = ["News ID", "Category", "SubCategory", "Title", "Abstract", "URL", "Title Entities", "Abstract Entities"]
-    news_df["All Text"] = news_df["Title"]+ \
-                        ". "+news_df["Category"]+ \
-                            ". "+news_df["SubCategory"]+ \
-                                ". "+news_df["Abstract"]
-    news_df = news_df.set_index("News ID")
-    texts = [news_df.loc[article_id]["All Text"] for article_id in article_ids]
-    texts = [t if not pd.isna(t) else "" for t in texts]
-    return texts
+def compute_metrics(model, dataset, loss_func, device="cpu"):
 
-def cal_metrics(model, text_encoder, user_to_id, article_to_id, data_path: Path = Path("data"), to_torch: bool = True, split: str = "MINDsmall_validation"):
-    behaviors_df_val = get_impression_df(data_path, split="MINDsmall_validation")
+    model.eval()
+    impressions = dataset.get_impressions()
+    group_scores, group_labels = [], []
+    loss = 0
 
-    for _, row in behaviors_df_val.iterrows():
-        click = row.Click
-        noclicks = row.Noclicks
-        user_id = row['User ID']
-        y_true = [1] + [0]*len(noclicks)
-        article_ids = [click] + [0]*len(noclicks)
-        article_ids = [article_to_id[article] for article in article_ids]
-        encoded_texts = text_encoder.encode(
-            get_article_texts(article_ids=article_ids, data_path=data_path),
-            convert_to_tensor=True,
-            show_progress_bar=True).detach().cpu().numpy()
-        user_id = user_to_id[user_id]
-
-        if to_torch:
-            user_id = torch.Tensor([user_id]).long()
-            article_ids = torch.Tensor(article_ids).long()
-            y_true = torch.Tensor(y_true).float()
-
-        y_score = []
-        for article_id, encoded_text in zip(article_ids, encoded_texts):
-            y_score.append(model(user_id, article_id, encoded_text).item())
+    with torch.no_grad():
         
-    return click, noclicks
+        for user, imp in tqdm(impressions):
+            # Parse row
+            articles = [imp_str.split("-")[0] for imp_str in imp.split()]
+            labels = [float(imp_str.split("-")[1]) for imp_str in imp.split()]
+            user_id = dataset.user_to_id[user]
+            article_ids = [dataset.article_to_id[article] for article in articles]
 
-if __name__ == "__main__":
-    behaviors_df = get_impression_df("validation", Path("data"))
-    print(behaviors_df[["Noclicks", "Click"]])
+            # Tensorify
+            user_id_tensor = torch.Tensor([user_id for _ in range(len(labels))]).long().to(device)
+            article_id_tensor = torch.Tensor(article_ids).long().to(device)
+            labels_tensor = torch.Tensor(labels).to(device)
+
+            if model.text_projector is not None:
+                encoded_text = torch.Tensor(dataset.encoded_texts[article_ids]).to(device)
+            else:
+                encoded_text = None
+
+            # Get preds
+            scores = model(user_id_tensor, article_id_tensor, encoded_text).squeeze(dim=-1) 
+            loss += loss_func(scores, labels_tensor)
+            group_scores.append(scores.detach().cpu().tolist())
+            group_labels.append(labels_tensor.detach().cpu().tolist())
+        
+    
+    ndcg5 = np.mean(
+        [ndcg_score(labels, scores, 5) for labels, scores in zip(group_labels, group_scores)]
+    )
+
+    ndcg10 = np.mean(
+        [ndcg_score(labels, scores, 10) for labels, scores in zip(group_labels, group_scores)]
+    )
+
+    mrr = np.mean(
+        [mrr_score(labels, scores) for labels, scores in zip(group_labels, group_scores)]
+    )
+
+    group_auc = np.mean(
+        [roc_auc_score(labels, scores) for labels, scores in zip(group_labels, group_scores)]
+    )
+
+    group_scores_flat = np.asarray([s for g in group_scores for s in g])
+    group_preds = np.where(group_scores_flat > 0.5, 1.0, 0.0)
+    labels_flat = np.asarray([l for g in group_labels for l in g])
+    a = accuracy_score(labels_flat, group_preds)
+    p, r, f, s = precision_recall_fscore_support(labels_flat, group_preds)
+
+    return {
+        "ndcg5": ndcg5,
+        "ndcg10": ndcg10,
+        "mrr": mrr,
+        "auc": group_auc,
+        "accuracy": a,
+        "precision": p.tolist(),
+        "recall": r.tolist(),
+        "f1": f.tolist(),
+        "support": s.tolist(),
+        "val_loss": loss.item() / len(group_labels)
+    }
