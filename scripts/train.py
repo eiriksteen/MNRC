@@ -115,7 +115,7 @@ if __name__ == "__main__":
         raise ValueError(f"{args.model} not implemented")
 
     if args.add_text:
-        p = f"training_results_{args.model}_wte_new"
+        p = f"training_results_{args.model}_wte"
     else:
         p = f"training_results_{args.model}"
 
