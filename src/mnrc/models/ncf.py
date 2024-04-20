@@ -15,7 +15,7 @@ class NeuralMatrixFactorizer(nn.Module):
         self.latent_dim = latent_dim
         self.wtext = wtext
 
-        self.text_projector = nn.Linear(384, latent_dim) if wtext else nn.Identity()
+        self.text_projector = nn.Linear(384, latent_dim) if wtext else None
         self.user_matrix_gmf = nn.Embedding(num_users, latent_dim)
         self.item_matrix_gmf = nn.Embedding(num_items, latent_dim)
         self.user_matrix_nl = nn.Embedding(num_users, latent_dim)
