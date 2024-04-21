@@ -121,9 +121,9 @@ if __name__ == "__main__":
         raise ValueError(f"{args.model} not implemented")
 
     if args.add_text:
-        p = f"training_results_{args.model}_wte{'_wtd' if args.weighted else ''}"
+        p = f"training_results_{args.model}_{args.latent_dim}_wte{'_wtd' if args.weighted else ''}"
     else:
-        p = f"training_results_{args.model}{'_wtd' if args.weighted else ''}"
+        p = f"training_results_{args.model}_{args.latent_dim}{'_wtd' if args.weighted else ''}"
 
     out_dir = Path(p)
     out_dir.mkdir(exist_ok=True)
