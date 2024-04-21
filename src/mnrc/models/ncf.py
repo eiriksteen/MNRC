@@ -54,8 +54,10 @@ class NeuralMatrixFactorizer(nn.Module):
             logits_text = torch.zeros_like(logits_gmf).to(logits_gmf.device)
 
         if self.wtext:
-            logits = self.sigmoid(self.linear(torch.cat((logits_gmf, logits_nl, logits_text), dim=-1)))
+            logits = self.linear(torch.cat((logits_gmf, logits_nl, logits_text), dim=-1))
         else:
-            logits = self.sigmoid(self.linear(torch.cat((logits_gmf, logits_nl), dim=-1)))
+            logits = self.linear(torch.cat((logits_gmf, logits_nl), dim=-1))
 
-        return logits
+        scores = self.sigmoid(logits)
+        
+        return logits, scores

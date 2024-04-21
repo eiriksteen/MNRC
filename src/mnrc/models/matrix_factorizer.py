@@ -32,7 +32,8 @@ class MatrixFactorizer(nn.Module):
         else:
             encoded_text = torch.zeros_like(content_vecs).to(content_ids.device)
 
-        logits = self.sigmoid((user_vecs*(content_vecs+encoded_text)).sum(dim=-1))
+        logits = (user_vecs*(content_vecs+encoded_text)).sum(dim=-1)
+        scores = self.sigmoid(logits)
 
-        return logits[:, None]
+        return logits[:, None], scores[:, None]
     

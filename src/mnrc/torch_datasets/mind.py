@@ -105,16 +105,19 @@ class MINDDataset(Dataset):
 
         behaviors_dict = {}
 
+        counts = [0,0]
         for _, row in self.behaviors_df.iterrows():
             user = row["User ID"]
             for impression in row["Impressions"].split():
                 article, label = impression.split("-")
                 if article in self.article_to_id.keys():
                     behaviors_dict[f"{user}-{article}-{row['Time']}"] = float(label)
+                    counts[int(label)]+=1
 
-            if not pd.isna(row["History"]):
-                for article in row["History"].split():
-                    if article in self.article_to_id.keys():
-                        behaviors_dict[f"{user}-{article}-{row['Time']}"] = 1.0
+            # if not pd.isna(row["History"]):
+            #     for article in row["History"].split():
+            #         if article in self.article_to_id.keys():
+            #             behaviors_dict[f"{user}-{article}-{row['Time']}"] = 1.0
 
+        print(f"LABEL COUNTS = {counts}")
         return list(behaviors_dict.items())

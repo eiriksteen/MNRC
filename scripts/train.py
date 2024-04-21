@@ -18,6 +18,8 @@ DEVICE = (
     else "cpu"
 )
 
+DEVICE = "cpu"
+
 print(f"USING DEVICE {DEVICE}")
 
 def train(
@@ -32,7 +34,7 @@ def train(
 
     model = model.to(DEVICE)
     train_loader = DataLoader(train_data, args.batch_size, shuffle=True)
-    loss_func = nn.BCELoss()
+    loss_func = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([24.0]))
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     min_val_loss = float("inf")
 
@@ -48,7 +50,7 @@ def train(
             encoded_text = batch["encoded_text"].to(DEVICE) if args.add_text else None
             scores = batch["score"].to(DEVICE)
 
-            logits = model(user_ids, article_ids, encoded_text)
+            logits, _ = model(user_ids, article_ids, encoded_text)
             loss = loss_func(logits, scores)
 
             optimizer.zero_grad()
@@ -57,7 +59,11 @@ def train(
             train_loss += loss.item()
 
         model.eval()
-        metrics = compute_metrics(model, validation_data, loss_func, DEVICE)
+        metrics = compute_metrics(
+            model, 
+            validation_data, 
+            loss_func, 
+            DEVICE)
         metrics["train_loss"] = train_loss / len(train_loader)
 
         if metrics["val_loss"] < min_val_loss:
