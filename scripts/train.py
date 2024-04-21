@@ -18,8 +18,6 @@ DEVICE = (
     else "cpu"
 )
 
-DEVICE = "cpu"
-
 print(f"USING DEVICE {DEVICE}")
 
 def train(
@@ -34,7 +32,7 @@ def train(
 
     model = model.to(DEVICE)
     train_loader = DataLoader(train_data, args.batch_size, shuffle=True)
-    loss_func = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([24.0]))
+    loss_func = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([24.0]).to(DEVICE))
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     min_val_loss = float("inf")
 
