@@ -25,4 +25,4 @@ module purge
 # Running your python file
 module load Anaconda3/2023.09-0
 conda activate cv
-python scripts/train.py --model_name=$1 --add_text
+python scripts/train.py --model=$1 --add_text
