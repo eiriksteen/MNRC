@@ -50,7 +50,8 @@ def compute_metrics(model, dataset, loss_func, device="cpu"):
                 encoded_text = None
 
             # Get preds
-            logits, scores = model(user_id_tensor, article_id_tensor, encoded_text).squeeze(dim=-1) 
+            logits, scores = model(user_id_tensor, article_id_tensor, encoded_text)
+            logits, scores = logits.squeeze(dim=-1), scores.squeeze(dim=-1)
             loss += loss_func(logits, labels_tensor)
             group_scores.append(scores.detach().cpu().tolist())
             group_labels.append(labels_tensor.detach().cpu().tolist())
