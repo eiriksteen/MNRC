@@ -32,9 +32,10 @@ def train(
 
     model = model.to(DEVICE)
     train_loader = DataLoader(train_data, args.batch_size, shuffle=True)
-    loss_func = nn.BCEWithLogitsLoss(pos_weight=torch.Tensor([24.0]).to(DEVICE))
+    loss_func = nn.BCEWithLogitsLoss(
+        pos_weight=torch.Tensor([24.0 if args.weighted else 1.0]).to(DEVICE))
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
-    min_val_loss = float("inf")
+    max_auc = 0
 
     for epoch in range(args.num_epochs): 
         print(f"RUNNING EPOCH {epoch+1}")
@@ -64,9 +65,9 @@ def train(
             DEVICE)
         metrics["train_loss"] = train_loss / len(train_loader)
 
-        if metrics["val_loss"] < min_val_loss:
-            print("New min loss, saving model")
-            min_val_loss = metrics["val_loss"]
+        if metrics["auc"] > max_auc:
+            print("New max auc, saving model")
+            max_auc = metrics["auc"]
             torch.save(model.state_dict(), out_dir / "model")
 
             with open(out_dir / f"metrics_epoch{epoch+1}.json", "w") as f:
@@ -86,6 +87,7 @@ if __name__ == "__main__":
     parser.add_argument("--num_epochs", default=10, type=int)
     parser.add_argument("--from_scratch", action=argparse.BooleanOptionalAction)
     parser.add_argument("--add_text", action=argparse.BooleanOptionalAction)
+    parser.add_argument("--weighted", action=argparse.BooleanOptionalAction)
 
     args = parser.parse_args()
 
